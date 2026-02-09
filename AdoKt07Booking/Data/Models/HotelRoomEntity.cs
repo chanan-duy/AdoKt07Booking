@@ -12,9 +12,15 @@ public class HotelRoomEntity
 {
 	[Key] [Column("id")] public int Id { get; set; }
 
-	[Required] [MaxLength(100)] [Column("name")] public string Name { get; set; } = string.Empty;
+	[Required]
+	[MaxLength(100)]
+	[Column("name")]
+	public string Name { get; set; } = string.Empty;
 
-	[Required] [MaxLength(32)] [Column("room_type")] public RoomType RoomType { get; set; }
+	[Required]
+	[MaxLength(32)]
+	[Column("room_type")]
+	public RoomType RoomType { get; set; }
 
 	[Required] [Column("max_occupancy")] public int MaxOccupancy { get; set; }
 

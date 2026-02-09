@@ -12,7 +12,10 @@ public class RestaurantTableEntity
 {
 	[Key] [Column("id")] public int Id { get; set; }
 
-	[Required] [MaxLength(100)] [Column("name")] public string Name { get; set; } = string.Empty;
+	[Required]
+	[MaxLength(100)]
+	[Column("name")]
+	public string Name { get; set; } = string.Empty;
 
 	[Required] [Column("seat_capacity")] public int SeatCapacity { get; set; }
 

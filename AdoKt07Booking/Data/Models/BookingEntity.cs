@@ -16,7 +16,10 @@ public class BookingEntity
 {
 	[Key] [Column("id")] public long Id { get; set; }
 
-	[Required] [MaxLength(32)] [Column("resource_type")] public ResourceType ResourceType { get; set; }
+	[Required]
+	[MaxLength(32)]
+	[Column("resource_type")]
+	public ResourceType ResourceType { get; set; }
 
 	[Required] [Column("resource_id")] public int ResourceId { get; set; }
 
@@ -24,7 +27,10 @@ public class BookingEntity
 
 	[Required] [Column("end_time")] public DateTimeOffset EndTime { get; set; }
 
-	[Required] [MaxLength(32)] [Column("status")] public BookingStatus Status { get; set; } = BookingStatus.Confirmed;
+	[Required]
+	[MaxLength(32)]
+	[Column("status")]
+	public BookingStatus Status { get; set; } = BookingStatus.Confirmed;
 
 	[Required] [Column("created_at")] public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
