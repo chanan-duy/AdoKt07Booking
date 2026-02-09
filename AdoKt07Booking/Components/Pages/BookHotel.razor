@@ -150,7 +150,7 @@
 							@if (booking.Status == BookingStatus.Confirmed)
 							{
 								<button class="btn btn-sm btn-outline-danger" disabled="@_loading"
-								        @onclick="() => CancelAsync(booking.BookingId)">Cancel
+								        @onclick="args => CancelAsync(booking.BookingId, args)">Cancel
 								</button>
 							}
 						</td>
@@ -237,12 +237,15 @@
 		}
 	}
 
-	private async Task CancelAsync(long bookingId)
+	private async Task CancelAsync(long bookingId, MouseEventArgs args)
 	{
-		var confirmed = await Js.InvokeAsync<bool>("confirm", $"Cancel hotel booking #{bookingId}?");
-		if (!confirmed)
+		if (!args.ShiftKey)
 		{
-			return;
+			var confirmed = await Js.InvokeAsync<bool>("confirm", $"Cancel hotel booking #{bookingId}?");
+			if (!confirmed)
+			{
+				return;
+			}
 		}
 
 		_loading = true;
