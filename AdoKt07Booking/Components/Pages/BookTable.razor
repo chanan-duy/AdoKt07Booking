@@ -11,12 +11,12 @@
 	<div class="card-body">
 		<div class="row g-3 align-items-end">
 			<div class="col-md-5">
-				<label class="form-label">Start date and time</label>
+				<label class="form-label">Start</label>
 				<InputDate @bind-Value="_filter.StartLocal" @bind-Value:after="OnStartChangedAsync" Type="InputDateType.DateTimeLocal"
 				           class="form-control"/>
 			</div>
 			<div class="col-md-5">
-				<label class="form-label">End date and time</label>
+				<label class="form-label">End</label>
 				<InputDate @bind-Value="_filter.EndLocal" @bind-Value:after="OnEndChangedAsync" Type="InputDateType.DateTimeLocal"
 				           class="form-control"/>
 			</div>
@@ -49,42 +49,32 @@
 	<div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">@_message</div>
 }
 
-<div class="row g-3 mb-3">
-	<div class="col-sm-6 col-lg-3">
-		<div class="card border-0 shadow-sm">
-			<div class="card-body py-2">
-				<div class="small text-muted">Available</div>
-				<div class="h4 mb-0">@AvailableCount</div>
-			</div>
-		</div>
-	</div>
-	<div class="col-sm-6 col-lg-3">
-		<div class="card border-0 shadow-sm">
-			<div class="card-body py-2">
-				<div class="small text-muted">Booked</div>
-				<div class="h4 mb-0">@BookedCount</div>
-			</div>
-		</div>
-	</div>
-	<div class="col-lg-6">
-		<div class="card border-0 shadow-sm">
-			<div class="card-body py-2">
-				<div class="small text-muted">Selected slot</div>
-				<div>@_filter.StartLocal.ToString("yyyy-MM-dd HH:mm") - @_filter.EndLocal.ToString("yyyy-MM-dd HH:mm")</div>
-			</div>
-		</div>
-	</div>
-</div>
+@{
+	var visibleTables = _showBookedTables
+		? _availability
+		: _availability.Where(table => !table.IsBooked).ToList();
+}
 
 <div class="card shadow-sm border-0 mb-4">
 	<div class="card-header bg-white d-flex justify-content-between align-items-center">
-		<strong>Availability For Selected Slot</strong>
-		<span class="badge text-bg-light">@_availability.Count table(s)</span>
+		<div>
+			<strong>Available tables</strong>
+			<div
+				class="small text-muted">@_filter.StartLocal.ToString("yyyy-MM-dd HH:mm") to @_filter.EndLocal.ToString("yyyy-MM-dd HH:mm")</div>
+		</div>
+		<div class="d-flex align-items-center gap-3">
+			<div class="form-check form-switch mb-0">
+				<InputCheckbox id="showBookedTables" class="form-check-input" @bind-Value="_showBookedTables"/>
+				<label class="form-check-label small" for="showBookedTables">Show booked</label>
+			</div>
+			<span class="badge text-bg-light">@visibleTables.Count table(s)</span>
+		</div>
 	</div>
 	<div class="card-body p-0">
-		@if (_availability.Count == 0)
+		@if (visibleTables.Count == 0)
 		{
-			<div class="p-3 text-muted">No tables found. Add restaurant tables to the database first.</div>
+			<div
+				class="p-3 text-muted">@(_showBookedTables ? "No tables found. Add restaurant tables to the database first." : "No available tables for this slot.")</div>
 		}
 		else
 		{
@@ -99,7 +89,7 @@
 				</tr>
 				</thead>
 				<tbody>
-				@foreach (var table in _availability)
+				@foreach (var table in visibleTables)
 				{
 					<tr>
 						<td>@table.TableName</td>
@@ -125,12 +115,12 @@
 	</div>
 </div>
 
-<div class="card shadow-sm border-0">
-	<div class="card-header bg-white d-flex justify-content-between align-items-center">
-		<strong>Bookings Overlapping Selected Slot</strong>
+<details class="card shadow-sm border-0">
+	<summary class="card-header bg-white d-flex justify-content-between align-items-center details-toggle">
+		<strong>View overlapping bookings</strong>
 		<span class="badge text-bg-light">@_windowBookings.Count</span>
-	</div>
-	<div class="card-body p-0">
+	</summary>
+	<div class="card-body p-0 border-top">
 		@if (_windowBookings.Count == 0)
 		{
 			<div class="p-3 text-muted">No bookings in this slot.</div>
@@ -153,7 +143,7 @@
 					<tr>
 						<td>#@booking.BookingId</td>
 						<td>@booking.TableName</td>
-						<td>@booking.StartTime.LocalDateTime.ToString("yyyy-MM-dd HH:mm") - @booking.EndTime.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+						<td>@booking.StartTime.LocalDateTime.ToString("yyyy-MM-dd HH:mm") to @booking.EndTime.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
 						<td>
 							<span
 								class="badge @(booking.Status == BookingStatus.Confirmed ? "text-bg-success" : "text-bg-secondary")">@booking.Status</span>
@@ -173,7 +163,7 @@
 			</table>
 		}
 	</div>
-</div>
+</details>
 
 @code {
 	private static readonly TimeSpan MaxDuration = TimeSpan.FromHours(2);
@@ -183,11 +173,10 @@
 	private readonly List<TableAvailabilityDto> _availability = [];
 	private readonly List<TableBookingListItemDto> _windowBookings = [];
 	private bool _loading;
+	private bool _showBookedTables;
 	private bool _isError;
 	private string? _message;
 
-	private int AvailableCount => _availability.Count(x => !x.IsBooked);
-	private int BookedCount => _availability.Count - AvailableCount;
 	private string DurationLabel => $"{(int)(_filter.EndLocal - _filter.StartLocal).TotalMinutes} min";
 
 	protected override async Task OnInitializedAsync()

@@ -12,18 +12,18 @@
 	<div class="card-body">
 		<div class="row g-3 align-items-end">
 			<div class="col-md-5">
-				<label class="form-label">Check-in date</label>
+				<label class="form-label">Check in</label>
 				<InputDate @bind-Value="_filter.StartDate" @bind-Value:after="OnCheckInChangedAsync" class="form-control"/>
 			</div>
 			<div class="col-md-5">
-				<label class="form-label">Check-out date</label>
+				<label class="form-label">Check out</label>
 				<InputDate @bind-Value="_filter.EndDate" @bind-Value:after="OnCheckOutChangedAsync" class="form-control"/>
 			</div>
 			<div class="col-md-2 d-grid">
 				<button class="btn btn-outline-secondary" type="button" disabled="@_loading" @onclick="ResetDatesAsync">Reset</button>
 			</div>
 		</div>
-		<div class="small text-muted mt-2">Minimum stay is 1 night.</div>
+		<div class="small text-muted mt-2">Minimum stay: 1 night.</div>
 	</div>
 </div>
 
@@ -31,43 +31,31 @@
 {
 	<div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">@_message</div>
 }
-
-<div class="row g-3 mb-3">
-	<div class="col-sm-6 col-lg-3">
-		<div class="card border-0 shadow-sm">
-			<div class="card-body py-2">
-				<div class="small text-muted">Available</div>
-				<div class="h4 mb-0">@AvailableCount</div>
-			</div>
-		</div>
-	</div>
-	<div class="col-sm-6 col-lg-3">
-		<div class="card border-0 shadow-sm">
-			<div class="card-body py-2">
-				<div class="small text-muted">Booked</div>
-				<div class="h4 mb-0">@BookedCount</div>
-			</div>
-		</div>
-	</div>
-	<div class="col-lg-6">
-		<div class="card border-0 shadow-sm">
-			<div class="card-body py-2">
-				<div class="small text-muted">Selected stay window</div>
-				<div>@_filter.StartDate.ToString("yyyy-MM-dd") - @_filter.EndDate.ToString("yyyy-MM-dd")</div>
-			</div>
-		</div>
-	</div>
-</div>
+@{
+	var visibleRooms = _showBookedRooms
+		? _availability
+		: _availability.Where(room => !room.IsBooked).ToList();
+}
 
 <div class="card shadow-sm border-0 mb-4">
 	<div class="card-header bg-white d-flex justify-content-between align-items-center">
-		<strong>Availability For Selected Stay</strong>
-		<span class="badge text-bg-light">@_availability.Count room(s)</span>
+		<div>
+			<strong>Available rooms</strong>
+			<div class="small text-muted">@_filter.StartDate.ToString("yyyy-MM-dd") to @_filter.EndDate.ToString("yyyy-MM-dd")</div>
+		</div>
+		<div class="d-flex align-items-center gap-3">
+			<div class="form-check form-switch mb-0">
+				<InputCheckbox id="showBookedRooms" class="form-check-input" @bind-Value="_showBookedRooms"/>
+				<label class="form-check-label small" for="showBookedRooms">Show booked</label>
+			</div>
+			<span class="badge text-bg-light">@visibleRooms.Count room(s)</span>
+		</div>
 	</div>
 	<div class="card-body p-0">
-		@if (_availability.Count == 0)
+		@if (visibleRooms.Count == 0)
 		{
-			<div class="p-3 text-muted">No rooms found. Add hotel rooms to the database first.</div>
+			<div
+				class="p-3 text-muted">@(_showBookedRooms ? "No rooms found. Add hotel rooms to the database first." : "No available rooms for these dates.")</div>
 		}
 		else
 		{
@@ -82,7 +70,7 @@
 				</tr>
 				</thead>
 				<tbody>
-				@foreach (var room in _availability)
+				@foreach (var room in visibleRooms)
 				{
 					<tr>
 						<td>@room.RoomName</td>
@@ -108,12 +96,12 @@
 	</div>
 </div>
 
-<div class="card shadow-sm border-0">
-	<div class="card-header bg-white d-flex justify-content-between align-items-center">
-		<strong>Bookings Overlapping Selected Stay</strong>
+<details class="card shadow-sm border-0">
+	<summary class="card-header bg-white d-flex justify-content-between align-items-center details-toggle">
+		<strong>View overlapping bookings</strong>
 		<span class="badge text-bg-light">@_windowBookings.Count</span>
-	</div>
-	<div class="card-body p-0">
+	</summary>
+	<div class="card-body p-0 border-top">
 		@if (_windowBookings.Count == 0)
 		{
 			<div class="p-3 text-muted">No bookings in this stay window.</div>
@@ -125,8 +113,7 @@
 				<tr>
 					<th>ID</th>
 					<th>Room</th>
-					<th>Check-in</th>
-					<th>Check-out</th>
+					<th>Stay</th>
 					<th>Status</th>
 					<th class="text-end">Action</th>
 				</tr>
@@ -137,8 +124,7 @@
 					<tr>
 						<td>#@booking.BookingId</td>
 						<td>@booking.RoomName</td>
-						<td>@booking.StartTime.LocalDateTime.ToString("yyyy-MM-dd")</td>
-						<td>@booking.EndTime.LocalDateTime.ToString("yyyy-MM-dd")</td>
+						<td>@booking.StartTime.LocalDateTime.ToString("yyyy-MM-dd") to @booking.EndTime.LocalDateTime.ToString("yyyy-MM-dd")</td>
 						<td>
 							<span
 								class="badge @(booking.Status == BookingStatus.Confirmed ? "text-bg-success" : "text-bg-secondary")">@booking.Status</span>
@@ -158,18 +144,16 @@
 			</table>
 		}
 	</div>
-</div>
+</details>
 
 @code {
 	private readonly HotelFilterModel _filter = new();
 	private readonly List<HotelAvailabilityDto> _availability = [];
 	private readonly List<HotelBookingListItemDto> _windowBookings = [];
 	private bool _loading;
+	private bool _showBookedRooms;
 	private bool _isError;
 	private string? _message;
-
-	private int AvailableCount => _availability.Count(x => !x.IsBooked);
-	private int BookedCount => _availability.Count - AvailableCount;
 
 	protected override async Task OnInitializedAsync()
 	{

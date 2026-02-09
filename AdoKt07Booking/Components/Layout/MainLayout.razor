@@ -1,12 +1,12 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 
-<div class="page">
-	<div class="sidebar">
+<div class="page-shell">
+	<header class="app-header">
 		<NavMenu/>
-	</div>
+	</header>
 
 	<main>
-		<article class="content p-4">
+		<article class="content container py-4">
 			@Body
 		</article>
 	</main>
