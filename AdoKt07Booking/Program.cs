@@ -1,5 +1,6 @@
 using AdoKt07Booking.Components;
 using AdoKt07Booking.Data;
+using AdoKt07Booking.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace AdoKt07Booking;
@@ -19,7 +20,8 @@ public class Program
 			                  throw new InvalidOperationException("Connection string 'AppDbContext' not found."));
 		});
 
-		// builder.Services.AddScoped<TaskManagerService>();
+		builder.Services.AddScoped<IHotelService, HotelService>();
+		builder.Services.AddScoped<IRestaurantService, RestaurantService>();
 
 		var app = builder.Build();
 
@@ -28,13 +30,10 @@ public class Program
 			app.UseExceptionHandler("/Error");
 			app.UseHsts();
 		}
-		else
-		{
-			using var scope = app.Services.CreateScope();
-			var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
-			await dbContext.Database.EnsureCreatedAsync();
-		}
+		using var scope = app.Services.CreateScope();
+		var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+		await dbContext.Database.MigrateAsync();
 
 		app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 		app.UseHttpsRedirection();
