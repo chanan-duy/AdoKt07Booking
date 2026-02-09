@@ -20,4 +20,8 @@
         <Using Include="NUnit.Framework"/>
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\AdoKt07Booking\AdoKt07Booking.csproj"/>
+    </ItemGroup>
+
 </Project>
