@@ -1,25 +1,39 @@
 using AdoKt07Booking.Components;
+using AdoKt07Booking.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace AdoKt07Booking;
 
 public class Program
 {
-	public static void Main(string[] args)
+	public static async Task Main(string[] args)
 	{
 		var builder = WebApplication.CreateBuilder(args);
 
-		// Add services to the container.
 		builder.Services.AddRazorComponents()
 			.AddInteractiveServerComponents();
 
+		builder.Services.AddDbContext<AppDbContext>(options =>
+		{
+			options.UseSqlite(builder.Configuration.GetConnectionString("AppDbContext") ??
+			                  throw new InvalidOperationException("Connection string 'AppDbContext' not found."));
+		});
+
+		// builder.Services.AddScoped<TaskManagerService>();
+
 		var app = builder.Build();
 
-		// Configure the HTTP request pipeline.
 		if (!app.Environment.IsDevelopment())
 		{
 			app.UseExceptionHandler("/Error");
-			// The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
 			app.UseHsts();
+		}
+		else
+		{
+			using var scope = app.Services.CreateScope();
+			var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+			await dbContext.Database.EnsureCreatedAsync();
 		}
 
 		app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
@@ -31,6 +45,6 @@ public class Program
 		app.MapRazorComponents<App>()
 			.AddInteractiveServerRenderMode();
 
-		app.Run();
+		await app.RunAsync();
 	}
 }
