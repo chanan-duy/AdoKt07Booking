@@ -1,0 +1,151 @@
+@page "/book-hotel"
+@rendermode InteractiveServer
+@inject IHotelService HotelService
+
+<PageTitle>Book Hotel</PageTitle>
+
+<h1 class="h3 mb-3">Hotel Booking</h1>
+
+<EditForm Model="_filter" OnValidSubmit="LoadAvailabilityAsync" class="card shadow-sm border-0 mb-4">
+	<DataAnnotationsValidator/>
+	<div class="card-body">
+		<div class="row g-3 align-items-end">
+			<div class="col-md-4">
+				<label class="form-label">Check-in</label>
+				<InputDate @bind-Value="_filter.StartDate" class="form-control"/>
+			</div>
+			<div class="col-md-4">
+				<label class="form-label">Check-out</label>
+				<InputDate @bind-Value="_filter.EndDate" class="form-control"/>
+			</div>
+			<div class="col-md-4">
+				<button class="btn btn-primary w-100" type="submit" disabled="@_loading">
+					@(_loading ? "Loading..." : "Check Availability")
+				</button>
+			</div>
+		</div>
+	</div>
+</EditForm>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+	<div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">@_message</div>
+}
+
+<div class="card shadow-sm border-0">
+	<div class="card-header bg-white"><strong>Rooms</strong></div>
+	<div class="card-body p-0">
+		@if (_availability.Count == 0)
+		{
+			<div class="p-3 text-muted">No rooms found. Add hotel rooms to the database first.</div>
+		}
+		else
+		{
+			<table class="table table-striped mb-0">
+				<thead>
+				<tr>
+					<th>Name</th>
+					<th>Type</th>
+					<th>Max Occupancy</th>
+					<th class="text-end">Action</th>
+				</tr>
+				</thead>
+				<tbody>
+				@foreach (var room in _availability)
+				{
+					<tr>
+						<td>@room.RoomName</td>
+						<td>@room.RoomType</td>
+						<td>@room.MaxOccupancy</td>
+						<td class="text-end">
+							<button class="btn btn-sm @(room.IsBooked ? "btn-outline-secondary" : "btn-success")"
+							        disabled="@(room.IsBooked || _loading)"
+							        @onclick="() => BookAsync(room.RoomId)">
+								@(room.IsBooked ? "Booked" : "Book")
+							</button>
+						</td>
+					</tr>
+				}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	private readonly HotelFilterModel _filter = new();
+	private readonly List<HotelAvailabilityDto> _availability = [];
+	private bool _loading;
+	private bool _isError;
+	private string? _message;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadAvailabilityAsync();
+	}
+
+	private async Task LoadAvailabilityAsync()
+	{
+		_loading = true;
+		_message = null;
+		_isError = false;
+
+		try
+		{
+			var start = ToLocalMidnight(_filter.StartDate);
+			var end = ToLocalMidnight(_filter.EndDate);
+			var result = await HotelService.GetAvailabilityAsync(start, end);
+			_availability.Clear();
+			_availability.AddRange(result);
+		}
+		catch (Exception ex)
+		{
+			_isError = true;
+			_message = ex.Message;
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
+
+	private async Task BookAsync(int roomId)
+	{
+		_loading = true;
+		_message = null;
+		_isError = false;
+
+		try
+		{
+			await HotelService.CreateBookingAsync(new CreateHotelBookingDto(
+				roomId,
+				ToLocalMidnight(_filter.StartDate),
+				ToLocalMidnight(_filter.EndDate)));
+
+			_message = "Booking confirmed.";
+			await LoadAvailabilityAsync();
+		}
+		catch (Exception ex)
+		{
+			_isError = true;
+			_message = ex.Message;
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
+
+	private static DateTimeOffset ToLocalMidnight(DateOnly date)
+	{
+		var local = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Local);
+		return new DateTimeOffset(local);
+	}
+
+	private sealed class HotelFilterModel
+	{
+		public DateOnly StartDate { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+		public DateOnly EndDate { get; set; } = DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+	}
+
+}

@@ -21,14 +21,13 @@ public sealed class HotelService(AppDbContext dbContext) : IHotelService
 			.OrderBy(r => r.Name)
 			.ToListAsync(cancellationToken);
 
-		var bookedRoomIds = await BookingOverlap.Apply(
-				dbContext.Bookings.AsNoTracking().Where(b =>
-					b.ResourceType == ResourceType.HotelRoom && b.Status == BookingStatus.Confirmed),
-				startTime,
-				endTime)
+		var bookings = await dbContext.Bookings.AsNoTracking().ToListAsync(cancellationToken);
+		var bookedRoomIds = bookings
+			.Where(b => b.ResourceType == ResourceType.HotelRoom && b.Status == BookingStatus.Confirmed)
+			.Where(b => BookingOverlap.IsOverlapping(startTime, endTime, b.StartTime, b.EndTime))
 			.Select(b => b.ResourceId)
 			.Distinct()
-			.ToListAsync(cancellationToken);
+			.ToList();
 
 		var bookedSet = bookedRoomIds.ToHashSet();
 
@@ -62,14 +61,13 @@ public sealed class HotelService(AppDbContext dbContext) : IHotelService
 		}
 
 		const int capacity = 1;
-		var overlapCount = await BookingOverlap.Apply(
-				dbContext.Bookings.Where(b =>
-					b.ResourceType == ResourceType.HotelRoom &&
-					b.ResourceId == request.RoomId &&
-					b.Status == BookingStatus.Confirmed),
-				request.StartTime,
-				request.EndTime)
-			.CountAsync(cancellationToken);
+		var overlapCount = (await dbContext.Bookings
+				.ToListAsync(cancellationToken))
+			.Count(b =>
+				b.ResourceType == ResourceType.HotelRoom &&
+				b.ResourceId == request.RoomId &&
+				b.Status == BookingStatus.Confirmed &&
+				BookingOverlap.IsOverlapping(request.StartTime, request.EndTime, b.StartTime, b.EndTime));
 
 		if (overlapCount >= capacity)
 		{
@@ -95,11 +93,9 @@ public sealed class HotelService(AppDbContext dbContext) : IHotelService
 
 	public async Task CancelBookingAsync(long bookingId, CancellationToken cancellationToken = default)
 	{
-		var booking = await dbContext.Bookings.FirstOrDefaultAsync(
-			b => b.Id == bookingId && b.ResourceType == ResourceType.HotelRoom,
-			cancellationToken);
+		var booking = await dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
 
-		if (booking is null)
+		if (booking is null || booking.ResourceType != ResourceType.HotelRoom)
 		{
 			throw new InvalidOperationException($"Hotel booking {bookingId} was not found.");
 		}

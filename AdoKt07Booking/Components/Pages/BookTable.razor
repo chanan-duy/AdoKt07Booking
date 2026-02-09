@@ -1,0 +1,147 @@
+@page "/book-table"
+@rendermode InteractiveServer
+@inject IRestaurantService RestaurantService
+
+<PageTitle>Book Table</PageTitle>
+
+<h1 class="h3 mb-3">Restaurant Table Booking</h1>
+
+<EditForm Model="_filter" OnValidSubmit="LoadAvailabilityAsync" class="card shadow-sm border-0 mb-4">
+	<DataAnnotationsValidator/>
+	<div class="card-body">
+		<div class="row g-3 align-items-end">
+			<div class="col-md-4">
+				<label class="form-label">Start</label>
+				<InputDate @bind-Value="_filter.StartLocal" Type="InputDateType.DateTimeLocal" class="form-control"/>
+			</div>
+			<div class="col-md-4">
+				<label class="form-label">End</label>
+				<InputDate @bind-Value="_filter.EndLocal" Type="InputDateType.DateTimeLocal" class="form-control"/>
+			</div>
+			<div class="col-md-4">
+				<button class="btn btn-primary w-100" type="submit" disabled="@_loading">
+					@(_loading ? "Loading..." : "Check Availability")
+				</button>
+			</div>
+		</div>
+	</div>
+</EditForm>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+	<div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">@_message</div>
+}
+
+<div class="card shadow-sm border-0">
+	<div class="card-header bg-white"><strong>Tables</strong></div>
+	<div class="card-body p-0">
+		@if (_availability.Count == 0)
+		{
+			<div class="p-3 text-muted">No tables found. Add restaurant tables to the database first.</div>
+		}
+		else
+		{
+			<table class="table table-striped mb-0">
+				<thead>
+				<tr>
+					<th>Name</th>
+					<th>Capacity</th>
+					<th>Section</th>
+					<th class="text-end">Action</th>
+				</tr>
+				</thead>
+				<tbody>
+				@foreach (var table in _availability)
+				{
+					<tr>
+						<td>@table.TableName</td>
+						<td>@table.SeatCapacity</td>
+						<td>@(string.IsNullOrWhiteSpace(table.Section) ? "-" : table.Section)</td>
+						<td class="text-end">
+							<button class="btn btn-sm @(table.IsBooked ? "btn-outline-secondary" : "btn-success")"
+							        disabled="@(table.IsBooked || _loading)"
+							        @onclick="() => BookAsync(table.TableId)">
+								@(table.IsBooked ? "Booked" : "Book")
+							</button>
+						</td>
+					</tr>
+				}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
+@code {
+	private readonly TableFilterModel _filter = new();
+	private readonly List<TableAvailabilityDto> _availability = [];
+	private bool _loading;
+	private bool _isError;
+	private string? _message;
+
+	protected override async Task OnInitializedAsync()
+	{
+		await LoadAvailabilityAsync();
+	}
+
+	private async Task LoadAvailabilityAsync()
+	{
+		_loading = true;
+		_message = null;
+		_isError = false;
+
+		try
+		{
+			var (start, end) = ParseFilter();
+			var result = await RestaurantService.GetAvailabilityAsync(start, end);
+			_availability.Clear();
+			_availability.AddRange(result);
+		}
+		catch (Exception ex)
+		{
+			_isError = true;
+			_message = ex.Message;
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
+
+	private async Task BookAsync(int tableId)
+	{
+		_loading = true;
+		_message = null;
+		_isError = false;
+
+		try
+		{
+			var (start, end) = ParseFilter();
+			await RestaurantService.CreateBookingAsync(new CreateTableBookingDto(tableId, start, end));
+			_message = "Booking confirmed.";
+			await LoadAvailabilityAsync();
+		}
+		catch (Exception ex)
+		{
+			_isError = true;
+			_message = ex.Message;
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
+
+	private (DateTimeOffset Start, DateTimeOffset End) ParseFilter()
+	{
+		return (new DateTimeOffset(DateTime.SpecifyKind(_filter.StartLocal, DateTimeKind.Local)),
+			new DateTimeOffset(DateTime.SpecifyKind(_filter.EndLocal, DateTimeKind.Local)));
+	}
+
+	private sealed class TableFilterModel
+	{
+		public DateTime StartLocal { get; set; } = DateTime.Now;
+		public DateTime EndLocal { get; set; } = DateTime.Now.AddHours(1);
+	}
+
+}

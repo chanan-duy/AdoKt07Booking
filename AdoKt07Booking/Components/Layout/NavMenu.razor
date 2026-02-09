@@ -1,29 +1,9 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-	<div class="container-fluid">
-		<a class="navbar-brand" href="">AdoKt07Booking</a>
-	</div>
+<div class="p-3 border-bottom">
+	<a class="navbar-brand fw-semibold text-decoration-none" href="">Booking System</a>
 </div>
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler"/>
-
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-	<nav class="nav flex-column">
-		<div class="nav-item px-3">
-			<NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-				<span class="bi bi-house-door-fill-nav-menu" aria-hidden="true"></span> Home
-			</NavLink>
-		</div>
-
-		<div class="nav-item px-3">
-			<NavLink class="nav-link" href="counter">
-				<span class="bi bi-plus-square-fill-nav-menu" aria-hidden="true"></span> Counter
-			</NavLink>
-		</div>
-
-		<div class="nav-item px-3">
-			<NavLink class="nav-link" href="weather">
-				<span class="bi bi-list-nested-nav-menu" aria-hidden="true"></span> Weather
-			</NavLink>
-		</div>
-	</nav>
-</div>
+<nav class="nav flex-column p-2">
+	<NavLink class="nav-link" href="" Match="NavLinkMatch.All">Home</NavLink>
+	<NavLink class="nav-link" href="book-hotel">Book Hotel</NavLink>
+	<NavLink class="nav-link" href="book-table">Book Table</NavLink>
+</nav>

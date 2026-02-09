@@ -23,14 +23,13 @@ public sealed class RestaurantService(AppDbContext dbContext) : IRestaurantServi
 			.OrderBy(t => t.Name)
 			.ToListAsync(cancellationToken);
 
-		var bookedTableIds = await BookingOverlap.Apply(
-				dbContext.Bookings.AsNoTracking().Where(b =>
-					b.ResourceType == ResourceType.RestaurantTable && b.Status == BookingStatus.Confirmed),
-				startTime,
-				endTime)
+		var bookings = await dbContext.Bookings.AsNoTracking().ToListAsync(cancellationToken);
+		var bookedTableIds = bookings
+			.Where(b => b.ResourceType == ResourceType.RestaurantTable && b.Status == BookingStatus.Confirmed)
+			.Where(b => BookingOverlap.IsOverlapping(startTime, endTime, b.StartTime, b.EndTime))
 			.Select(b => b.ResourceId)
 			.Distinct()
-			.ToListAsync(cancellationToken);
+			.ToList();
 
 		var bookedSet = bookedTableIds.ToHashSet();
 
@@ -64,14 +63,13 @@ public sealed class RestaurantService(AppDbContext dbContext) : IRestaurantServi
 		}
 
 		const int capacity = 1;
-		var overlapCount = await BookingOverlap.Apply(
-				dbContext.Bookings.Where(b =>
-					b.ResourceType == ResourceType.RestaurantTable &&
-					b.ResourceId == request.TableId &&
-					b.Status == BookingStatus.Confirmed),
-				request.StartTime,
-				request.EndTime)
-			.CountAsync(cancellationToken);
+		var overlapCount = (await dbContext.Bookings
+				.ToListAsync(cancellationToken))
+			.Count(b =>
+				b.ResourceType == ResourceType.RestaurantTable &&
+				b.ResourceId == request.TableId &&
+				b.Status == BookingStatus.Confirmed &&
+				BookingOverlap.IsOverlapping(request.StartTime, request.EndTime, b.StartTime, b.EndTime));
 
 		if (overlapCount >= capacity)
 		{
@@ -97,11 +95,9 @@ public sealed class RestaurantService(AppDbContext dbContext) : IRestaurantServi
 
 	public async Task CancelBookingAsync(long bookingId, CancellationToken cancellationToken = default)
 	{
-		var booking = await dbContext.Bookings.FirstOrDefaultAsync(
-			b => b.Id == bookingId && b.ResourceType == ResourceType.RestaurantTable,
-			cancellationToken);
+		var booking = await dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
 
-		if (booking is null)
+		if (booking is null || booking.ResourceType != ResourceType.RestaurantTable)
 		{
 			throw new InvalidOperationException($"Table booking {bookingId} was not found.");
 		}
