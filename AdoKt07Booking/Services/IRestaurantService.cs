@@ -10,6 +10,8 @@ public interface IRestaurantService
 		CancellationToken cancellationToken = default
 	);
 
+	Task<IReadOnlyList<TableBookingListItemDto>> GetBookingsAsync(CancellationToken cancellationToken = default);
+
 	Task<BookingEntity> CreateBookingAsync(CreateTableBookingDto request, CancellationToken cancellationToken = default);
 
 	Task CancelBookingAsync(long bookingId, CancellationToken cancellationToken = default);

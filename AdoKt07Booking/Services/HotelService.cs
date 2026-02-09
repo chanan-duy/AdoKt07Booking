@@ -8,6 +8,31 @@ namespace AdoKt07Booking.Services;
 
 public sealed class HotelService(AppDbContext dbContext) : IHotelService
 {
+	public async Task<IReadOnlyList<HotelBookingListItemDto>> GetBookingsAsync(CancellationToken cancellationToken = default)
+	{
+		var rooms = await dbContext.HotelRooms
+			.AsNoTracking()
+			.ToDictionaryAsync(r => r.Id, r => r.Name, cancellationToken);
+
+		var bookings = await dbContext.Bookings
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+
+		return bookings
+			.Where(b => b.ResourceType == ResourceType.HotelRoom)
+			.OrderByDescending(b => b.StartTime)
+			.Select(b => new HotelBookingListItemDto(
+				b.Id,
+				b.ResourceId,
+				rooms.GetValueOrDefault(b.ResourceId, $"Room #{b.ResourceId}"),
+				b.StartTime,
+				b.EndTime,
+				b.Status,
+				b.CreatedAt,
+				b.CancelledAt))
+			.ToList();
+	}
+
 	public async Task<IReadOnlyList<HotelAvailabilityDto>> GetAvailabilityAsync(
 		DateTimeOffset startTime, DateTimeOffset endTime,
 		CancellationToken cancellationToken = default

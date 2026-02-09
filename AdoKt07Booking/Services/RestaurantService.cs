@@ -10,6 +10,31 @@ public sealed class RestaurantService(AppDbContext dbContext) : IRestaurantServi
 {
 	private static readonly TimeSpan MaxReservationDuration = TimeSpan.FromHours(2);
 
+	public async Task<IReadOnlyList<TableBookingListItemDto>> GetBookingsAsync(CancellationToken cancellationToken = default)
+	{
+		var tables = await dbContext.RestaurantTables
+			.AsNoTracking()
+			.ToDictionaryAsync(t => t.Id, t => t.Name, cancellationToken);
+
+		var bookings = await dbContext.Bookings
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+
+		return bookings
+			.Where(b => b.ResourceType == ResourceType.RestaurantTable)
+			.OrderByDescending(b => b.StartTime)
+			.Select(b => new TableBookingListItemDto(
+				b.Id,
+				b.ResourceId,
+				tables.GetValueOrDefault(b.ResourceId, $"Table #{b.ResourceId}"),
+				b.StartTime,
+				b.EndTime,
+				b.Status,
+				b.CreatedAt,
+				b.CancelledAt))
+			.ToList();
+	}
+
 	public async Task<IReadOnlyList<TableAvailabilityDto>> GetAvailabilityAsync(
 		DateTimeOffset startTime,
 		DateTimeOffset endTime, CancellationToken cancellationToken = default

@@ -1,12 +1,14 @@
 @page "/book-table"
 @rendermode InteractiveServer
 @inject IRestaurantService RestaurantService
+@inject IJSRuntime Js
 
 <PageTitle>Book Table</PageTitle>
 
-<h1 class="h3 mb-3">Restaurant Table Booking</h1>
+<h1 class="h3 mb-1">Restaurant Table Booking</h1>
+<p class="text-muted mb-3">Pick a time slot, reserve a table, or cancel existing bookings.</p>
 
-<EditForm Model="_filter" OnValidSubmit="LoadAvailabilityAsync" class="card shadow-sm border-0 mb-4">
+<EditForm Model="_filter" OnValidSubmit="RefreshAsync" class="card shadow-sm border-0 mb-3">
 	<DataAnnotationsValidator/>
 	<div class="card-body">
 		<div class="row g-3 align-items-end">
@@ -18,10 +20,13 @@
 				<label class="form-label">End</label>
 				<InputDate @bind-Value="_filter.EndLocal" Type="InputDateType.DateTimeLocal" class="form-control"/>
 			</div>
-			<div class="col-md-4">
+			<div class="col-md-3">
 				<button class="btn btn-primary w-100" type="submit" disabled="@_loading">
-					@(_loading ? "Loading..." : "Check Availability")
+					@(_loading ? "Loading..." : "Refresh")
 				</button>
+			</div>
+			<div class="col-md-1 d-grid">
+				<button class="btn btn-outline-secondary" type="button" disabled="@_loading" @onclick="SetDefaultDateTimes">Reset</button>
 			</div>
 		</div>
 	</div>
@@ -32,8 +37,38 @@
 	<div class="alert @(_isError ? "alert-danger" : "alert-success")" role="alert">@_message</div>
 }
 
-<div class="card shadow-sm border-0">
-	<div class="card-header bg-white"><strong>Tables</strong></div>
+<div class="row g-3 mb-3">
+	<div class="col-sm-6 col-lg-3">
+		<div class="card border-0 shadow-sm">
+			<div class="card-body py-2">
+				<div class="small text-muted">Available</div>
+				<div class="h4 mb-0">@AvailableCount</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-sm-6 col-lg-3">
+		<div class="card border-0 shadow-sm">
+			<div class="card-body py-2">
+				<div class="small text-muted">Already Booked</div>
+				<div class="h4 mb-0">@BookedCount</div>
+			</div>
+		</div>
+	</div>
+	<div class="col-lg-6">
+		<div class="card border-0 shadow-sm">
+			<div class="card-body py-2">
+				<div class="small text-muted">Current Window</div>
+				<div>@_filter.StartLocal.ToString("yyyy-MM-dd HH:mm") - @_filter.EndLocal.ToString("yyyy-MM-dd HH:mm")</div>
+			</div>
+		</div>
+	</div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+	<div class="card-header bg-white d-flex justify-content-between align-items-center">
+		<strong>Availability</strong>
+		<span class="badge text-bg-light">@_availability.Count table(s)</span>
+	</div>
 	<div class="card-body p-0">
 		@if (_availability.Count == 0)
 		{
@@ -47,6 +82,7 @@
 					<th>Name</th>
 					<th>Capacity</th>
 					<th>Section</th>
+					<th>Status</th>
 					<th class="text-end">Action</th>
 				</tr>
 				</thead>
@@ -57,6 +93,11 @@
 						<td>@table.TableName</td>
 						<td>@table.SeatCapacity</td>
 						<td>@(string.IsNullOrWhiteSpace(table.Section) ? "-" : table.Section)</td>
+						<td>
+							<span class="badge @(table.IsBooked ? "text-bg-secondary" : "text-bg-success")">
+								@(table.IsBooked ? "Booked" : "Available")
+							</span>
+						</td>
 						<td class="text-end">
 							<button class="btn btn-sm @(table.IsBooked ? "btn-outline-secondary" : "btn-success")"
 							        disabled="@(table.IsBooked || _loading)"
@@ -72,19 +113,71 @@
 	</div>
 </div>
 
+<div class="card shadow-sm border-0">
+	<div class="card-header bg-white d-flex justify-content-between align-items-center">
+		<strong>Bookings</strong>
+		<span class="badge text-bg-light">@_bookings.Count</span>
+	</div>
+	<div class="card-body p-0">
+		@if (_bookings.Count == 0)
+		{
+			<div class="p-3 text-muted">No restaurant bookings yet.</div>
+		}
+		else
+		{
+			<table class="table table-sm mb-0 align-middle">
+				<thead>
+				<tr>
+					<th>ID</th>
+					<th>Table</th>
+					<th>Slot</th>
+					<th>Status</th>
+					<th class="text-end">Action</th>
+				</tr>
+				</thead>
+				<tbody>
+				@foreach (var booking in _bookings)
+				{
+					<tr>
+						<td>#@booking.BookingId</td>
+						<td>@booking.TableName</td>
+						<td>@booking.StartTime.LocalDateTime.ToString("yyyy-MM-dd HH:mm") - @booking.EndTime.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
+						<td>
+							<span
+								class="badge @(booking.Status == BookingStatus.Confirmed ? "text-bg-success" : "text-bg-secondary")">@booking.Status</span>
+						</td>
+						<td class="text-end">
+							@if (booking.Status == BookingStatus.Confirmed)
+							{
+								<button class="btn btn-sm btn-outline-danger" disabled="@_loading"
+								        @onclick="() => CancelAsync(booking.BookingId)">Cancel
+								</button>
+							}
+						</td>
+					</tr>
+				}
+				</tbody>
+			</table>
+		}
+	</div>
+</div>
+
 @code {
 	private readonly TableFilterModel _filter = new();
 	private readonly List<TableAvailabilityDto> _availability = [];
+	private readonly List<TableBookingListItemDto> _bookings = [];
 	private bool _loading;
 	private bool _isError;
 	private string? _message;
+	private int AvailableCount => _availability.Count(x => !x.IsBooked);
+	private int BookedCount => _availability.Count - AvailableCount;
 
 	protected override async Task OnInitializedAsync()
 	{
-		await LoadAvailabilityAsync();
+		await RefreshAsync();
 	}
 
-	private async Task LoadAvailabilityAsync()
+	private async Task RefreshAsync()
 	{
 		_loading = true;
 		_message = null;
@@ -93,9 +186,17 @@
 		try
 		{
 			var (start, end) = ParseFilter();
-			var result = await RestaurantService.GetAvailabilityAsync(start, end);
+			var availabilityTask = RestaurantService.GetAvailabilityAsync(start, end);
+			var bookingsTask = RestaurantService.GetBookingsAsync();
+			await Task.WhenAll(availabilityTask, bookingsTask);
+
+			var result = await availabilityTask;
+			var bookings = await bookingsTask;
+
 			_availability.Clear();
 			_availability.AddRange(result);
+			_bookings.Clear();
+			_bookings.AddRange(bookings);
 		}
 		catch (Exception ex)
 		{
@@ -118,8 +219,8 @@
 		{
 			var (start, end) = ParseFilter();
 			await RestaurantService.CreateBookingAsync(new CreateTableBookingDto(tableId, start, end));
+			await RefreshAsync();
 			_message = "Booking confirmed.";
-			await LoadAvailabilityAsync();
 		}
 		catch (Exception ex)
 		{
@@ -130,6 +231,41 @@
 		{
 			_loading = false;
 		}
+	}
+
+	private async Task CancelAsync(long bookingId)
+	{
+		var confirmed = await Js.InvokeAsync<bool>("confirm", $"Cancel table booking #{bookingId}?");
+		if (!confirmed)
+		{
+			return;
+		}
+
+		_loading = true;
+		_message = null;
+		_isError = false;
+
+		try
+		{
+			await RestaurantService.CancelBookingAsync(bookingId);
+			await RefreshAsync();
+			_message = $"Booking #{bookingId} cancelled.";
+		}
+		catch (Exception ex)
+		{
+			_isError = true;
+			_message = ex.Message;
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
+
+	private void SetDefaultDateTimes()
+	{
+		_filter.StartLocal = DateTime.Now;
+		_filter.EndLocal = DateTime.Now.AddHours(1);
 	}
 
 	private (DateTimeOffset Start, DateTimeOffset End) ParseFilter()
