@@ -41,6 +41,15 @@
 			</button>
 			<span class="badge text-bg-light ms-1">Current duration: @DurationLabel</span>
 		</div>
+
+		@if (_editingBookingId is not null)
+		{
+			<div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+				<span class="small text-muted">Editing booking #@_editingBookingId.Value</span>
+				<button class="btn btn-sm btn-primary" type="button" disabled="@_loading" @onclick="SaveEditAsync">Save changes</button>
+				<button class="btn btn-sm btn-outline-secondary" type="button" disabled="@_loading" @onclick="StopEditing">Discard</button>
+			</div>
+		}
 	</div>
 </div>
 
@@ -140,7 +149,7 @@
 				<tbody>
 				@foreach (var booking in _windowBookings)
 				{
-					<tr>
+					<tr class="@(booking.BookingId == _editingBookingId ? "table-primary" : null)">
 						<td>#@booking.BookingId</td>
 						<td>@booking.TableName</td>
 						<td>@booking.StartTime.LocalDateTime.ToString("yyyy-MM-dd HH:mm") to @booking.EndTime.LocalDateTime.ToString("yyyy-MM-dd HH:mm")</td>
@@ -151,10 +160,14 @@
 						<td class="text-end">
 							@if (booking.Status == BookingStatus.Confirmed)
 							{
-								<button class="btn btn-sm btn-outline-danger" disabled="@_loading"
-								        title="Hold Shift and click to skip confirmation"
-								        @onclick="args => CancelAsync(booking.BookingId, args)">Cancel
-								</button>
+								<div class="btn-group btn-group-sm" role="group">
+									<button class="btn btn-outline-primary" disabled="@_loading" @onclick="() => BeginEdit(booking)">Edit
+									</button>
+									<button class="btn btn-outline-danger" disabled="@_loading"
+									        title="Hold Shift and click to skip confirmation"
+									        @onclick="args => CancelAsync(booking.BookingId, args)">Cancel
+									</button>
+								</div>
 							}
 						</td>
 					</tr>
@@ -173,6 +186,7 @@
 	private readonly List<TableAvailabilityDto> _availability = [];
 	private readonly List<TableBookingListItemDto> _windowBookings = [];
 	private bool _loading;
+	private long? _editingBookingId;
 	private bool _showBookedTables = true;
 	private bool _isError;
 	private string? _message;
@@ -268,6 +282,51 @@
 		}
 	}
 
+	private void BeginEdit(TableBookingListItemDto booking)
+	{
+		_editingBookingId = booking.BookingId;
+		_filter.StartLocal = booking.StartTime.LocalDateTime;
+		_filter.EndLocal = booking.EndTime.LocalDateTime;
+		NormalizeFromStart();
+	}
+
+	private async Task SaveEditAsync()
+	{
+		if (_editingBookingId is null)
+		{
+			return;
+		}
+
+		_loading = true;
+		_message = null;
+		_isError = false;
+
+		var bookingId = _editingBookingId.Value;
+
+		try
+		{
+			var (start, end) = ParseFilter();
+			await RestaurantService.UpdateBookingAsync(bookingId, new UpdateTableBookingDto(start, end));
+			await RefreshAsync();
+			_message = $"Booking #{bookingId} updated.";
+			_editingBookingId = null;
+		}
+		catch (Exception ex)
+		{
+			_isError = true;
+			_message = ex.Message;
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
+
+	private void StopEditing()
+	{
+		_editingBookingId = null;
+	}
+
 	private async Task CancelAsync(long bookingId, MouseEventArgs args)
 	{
 		if (!args.ShiftKey)
@@ -288,6 +347,10 @@
 			await RestaurantService.CancelBookingAsync(bookingId);
 			await RefreshAsync();
 			_message = $"Booking #{bookingId} cancelled.";
+			if (_editingBookingId == bookingId)
+			{
+				_editingBookingId = null;
+			}
 		}
 		catch (Exception ex)
 		{

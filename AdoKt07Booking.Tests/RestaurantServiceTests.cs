@@ -109,4 +109,71 @@ public class RestaurantServiceTests
 		Assert.That(async () => await service.CancelBookingAsync(booking.Id),
 			Throws.TypeOf<InvalidOperationException>().With.Message.Contain("was not found"));
 	}
+
+	[Test]
+	public async Task UpdateBookingAsync_WhenRequestValid_UpdatesBookingDates()
+	{
+		await using var fixture = await TestDbFixture.CreateAsync();
+		fixture.DbContext.RestaurantTables.Add(new RestaurantTableEntity
+			{ Id = 8, Name = "Table F", SeatCapacity = 4, Section = "Main", IsActive = true });
+		var booking = new BookingEntity
+		{
+			ResourceType = ResourceType.RestaurantTable,
+			ResourceId = 8,
+			StartTime = BaseDate,
+			EndTime = BaseDate.AddHours(1),
+			Status = BookingStatus.Confirmed,
+		};
+
+		fixture.DbContext.Bookings.Add(booking);
+		await fixture.DbContext.SaveChangesAsync();
+
+		var service = new RestaurantService(fixture.DbContext);
+		var updateRequest = new UpdateTableBookingDto(BaseDate.AddHours(3), BaseDate.AddHours(4));
+
+		var updated = await service.UpdateBookingAsync(booking.Id, updateRequest);
+
+		using (Assert.EnterMultipleScope())
+		{
+			Assert.That(updated.StartTime, Is.EqualTo(updateRequest.StartTime));
+			Assert.That(updated.EndTime, Is.EqualTo(updateRequest.EndTime));
+		}
+	}
+
+	[Test]
+	public async Task UpdateBookingAsync_WhenOverlappingConfirmedBookingExists_ThrowsInvalidOperationException()
+	{
+		await using var fixture = await TestDbFixture.CreateAsync();
+		fixture.DbContext.RestaurantTables.Add(new RestaurantTableEntity
+			{ Id = 9, Name = "Table G", SeatCapacity = 2, Section = "Patio", IsActive = true });
+
+		var bookingToUpdate = new BookingEntity
+		{
+			ResourceType = ResourceType.RestaurantTable,
+			ResourceId = 9,
+			StartTime = BaseDate,
+			EndTime = BaseDate.AddMinutes(30),
+			Status = BookingStatus.Confirmed,
+		};
+
+		var conflictingBooking = new BookingEntity
+		{
+			ResourceType = ResourceType.RestaurantTable,
+			ResourceId = 9,
+			StartTime = BaseDate.AddHours(1),
+			EndTime = BaseDate.AddHours(2),
+			Status = BookingStatus.Confirmed,
+		};
+
+		fixture.DbContext.Bookings.AddRange(bookingToUpdate, conflictingBooking);
+		await fixture.DbContext.SaveChangesAsync();
+
+		var service = new RestaurantService(fixture.DbContext);
+
+		Assert.That(async () =>
+				await service.UpdateBookingAsync(
+					bookingToUpdate.Id,
+					new UpdateTableBookingDto(BaseDate.AddHours(1).AddMinutes(15), BaseDate.AddHours(1).AddMinutes(45))),
+			Throws.TypeOf<InvalidOperationException>().With.Message.Contain("not available"));
+	}
 }

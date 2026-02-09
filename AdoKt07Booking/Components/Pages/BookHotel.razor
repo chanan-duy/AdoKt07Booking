@@ -24,6 +24,14 @@
 			</div>
 		</div>
 		<div class="small text-muted mt-2">Minimum stay: 1 night.</div>
+		@if (_editingBookingId is not null)
+		{
+			<div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+				<span class="small text-muted">Editing booking #@_editingBookingId.Value</span>
+				<button class="btn btn-sm btn-primary" type="button" disabled="@_loading" @onclick="SaveEditAsync">Save changes</button>
+				<button class="btn btn-sm btn-outline-secondary" type="button" disabled="@_loading" @onclick="StopEditing">Discard</button>
+			</div>
+		}
 	</div>
 </div>
 
@@ -121,7 +129,7 @@
 				<tbody>
 				@foreach (var booking in _windowBookings)
 				{
-					<tr>
+					<tr class="@(booking.BookingId == _editingBookingId ? "table-primary" : null)">
 						<td>#@booking.BookingId</td>
 						<td>@booking.RoomName</td>
 						<td>@booking.StartTime.LocalDateTime.ToString("yyyy-MM-dd") to @booking.EndTime.LocalDateTime.ToString("yyyy-MM-dd")</td>
@@ -132,10 +140,14 @@
 						<td class="text-end">
 							@if (booking.Status == BookingStatus.Confirmed)
 							{
-								<button class="btn btn-sm btn-outline-danger" disabled="@_loading"
-								        title="Hold Shift and click to skip confirmation"
-								        @onclick="args => CancelAsync(booking.BookingId, args)">Cancel
-								</button>
+								<div class="btn-group btn-group-sm" role="group">
+									<button class="btn btn-outline-primary" disabled="@_loading" @onclick="() => BeginEdit(booking)">Edit
+									</button>
+									<button class="btn btn-outline-danger" disabled="@_loading"
+									        title="Hold Shift and click to skip confirmation"
+									        @onclick="args => CancelAsync(booking.BookingId, args)">Cancel
+									</button>
+								</div>
 							}
 						</td>
 					</tr>
@@ -151,6 +163,7 @@
 	private readonly List<HotelAvailabilityDto> _availability = [];
 	private readonly List<HotelBookingListItemDto> _windowBookings = [];
 	private bool _loading;
+	private long? _editingBookingId;
 	private bool _showBookedRooms = true;
 	private bool _isError;
 	private string? _message;
@@ -240,6 +253,52 @@
 		}
 	}
 
+	private void BeginEdit(HotelBookingListItemDto booking)
+	{
+		_editingBookingId = booking.BookingId;
+		_filter.StartDate = DateOnly.FromDateTime(booking.StartTime.LocalDateTime);
+		_filter.EndDate = DateOnly.FromDateTime(booking.EndTime.LocalDateTime);
+		EnsureDateRange();
+	}
+
+	private async Task SaveEditAsync()
+	{
+		if (_editingBookingId is null)
+		{
+			return;
+		}
+
+		_loading = true;
+		_message = null;
+		_isError = false;
+
+		var bookingId = _editingBookingId.Value;
+
+		try
+		{
+			await HotelService.UpdateBookingAsync(bookingId, new UpdateHotelBookingDto(
+				ToLocalMidnight(_filter.StartDate),
+				ToLocalMidnight(_filter.EndDate)));
+			await RefreshAsync();
+			_message = $"Booking #{bookingId} updated.";
+			_editingBookingId = null;
+		}
+		catch (Exception ex)
+		{
+			_isError = true;
+			_message = ex.Message;
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
+
+	private void StopEditing()
+	{
+		_editingBookingId = null;
+	}
+
 	private async Task CancelAsync(long bookingId, MouseEventArgs args)
 	{
 		if (!args.ShiftKey)
@@ -260,6 +319,10 @@
 			await HotelService.CancelBookingAsync(bookingId);
 			await RefreshAsync();
 			_message = $"Booking #{bookingId} cancelled.";
+			if (_editingBookingId == bookingId)
+			{
+				_editingBookingId = null;
+			}
 		}
 		catch (Exception ex)
 		{

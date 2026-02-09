@@ -67,11 +67,7 @@ public sealed class HotelService(AppDbContext dbContext) : IHotelService
 	)
 	{
 		BookingValidation.EnsureValidRange(request.StartTime, request.EndTime);
-
-		if (request.EndTime - request.StartTime < TimeSpan.FromDays(1))
-		{
-			throw new ArgumentException("Hotel booking must be at least 1 night.");
-		}
+		EnsureMinStay(request.StartTime, request.EndTime);
 
 		await using var transaction =
 			await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -116,6 +112,54 @@ public sealed class HotelService(AppDbContext dbContext) : IHotelService
 		return booking;
 	}
 
+	public async Task<BookingEntity> UpdateBookingAsync(
+		long bookingId,
+		UpdateHotelBookingDto request,
+		CancellationToken cancellationToken = default
+	)
+	{
+		BookingValidation.EnsureValidRange(request.StartTime, request.EndTime);
+		EnsureMinStay(request.StartTime, request.EndTime);
+
+		await using var transaction =
+			await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+		var booking = await dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
+
+		if (booking is null || booking.ResourceType != ResourceType.HotelRoom)
+		{
+			throw new InvalidOperationException($"Hotel booking {bookingId} was not found.");
+		}
+
+		if (booking.Status == BookingStatus.Cancelled)
+		{
+			throw new InvalidOperationException("Cancelled hotel booking cannot be updated.");
+		}
+
+		const int capacity = 1;
+		var overlapCount = (await dbContext.Bookings
+				.ToListAsync(cancellationToken))
+			.Count(b =>
+				b.Id != bookingId &&
+				b.ResourceType == ResourceType.HotelRoom &&
+				b.ResourceId == booking.ResourceId &&
+				b.Status == BookingStatus.Confirmed &&
+				BookingOverlap.IsOverlapping(request.StartTime, request.EndTime, b.StartTime, b.EndTime));
+
+		if (overlapCount >= capacity)
+		{
+			throw new InvalidOperationException("The room is not available in the requested time window.");
+		}
+
+		booking.StartTime = request.StartTime;
+		booking.EndTime = request.EndTime;
+
+		await dbContext.SaveChangesAsync(cancellationToken);
+		await transaction.CommitAsync(cancellationToken);
+
+		return booking;
+	}
+
 	public async Task CancelBookingAsync(long bookingId, CancellationToken cancellationToken = default)
 	{
 		var booking = await dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
@@ -134,5 +178,13 @@ public sealed class HotelService(AppDbContext dbContext) : IHotelService
 		booking.CancelledAt = DateTimeOffset.UtcNow;
 
 		await dbContext.SaveChangesAsync(cancellationToken);
+	}
+
+	private static void EnsureMinStay(DateTimeOffset startTime, DateTimeOffset endTime)
+	{
+		if (endTime - startTime < TimeSpan.FromDays(1))
+		{
+			throw new ArgumentException("Hotel booking must be at least 1 night.");
+		}
 	}
 }

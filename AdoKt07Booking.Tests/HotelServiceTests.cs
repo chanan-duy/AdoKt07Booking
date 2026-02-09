@@ -153,4 +153,71 @@ public class HotelServiceTests
 			Assert.That(persisted.CancelledAt, Is.Not.Null);
 		}
 	}
+
+	[Test]
+	public async Task UpdateBookingAsync_WhenRequestValid_UpdatesBookingDates()
+	{
+		await using var fixture = await TestDbFixture.CreateAsync();
+		fixture.DbContext.HotelRooms.Add(new HotelRoomEntity
+			{ Id = 11, Name = "Room G", RoomType = RoomType.Double, MaxOccupancy = 2, IsActive = true });
+		var booking = new BookingEntity
+		{
+			ResourceType = ResourceType.HotelRoom,
+			ResourceId = 11,
+			StartTime = BaseDate,
+			EndTime = BaseDate.AddDays(1),
+			Status = BookingStatus.Confirmed,
+		};
+
+		fixture.DbContext.Bookings.Add(booking);
+		await fixture.DbContext.SaveChangesAsync();
+
+		var service = new HotelService(fixture.DbContext);
+		var updateRequest = new UpdateHotelBookingDto(BaseDate.AddDays(2), BaseDate.AddDays(4));
+
+		var updated = await service.UpdateBookingAsync(booking.Id, updateRequest);
+
+		using (Assert.EnterMultipleScope())
+		{
+			Assert.That(updated.StartTime, Is.EqualTo(updateRequest.StartTime));
+			Assert.That(updated.EndTime, Is.EqualTo(updateRequest.EndTime));
+		}
+	}
+
+	[Test]
+	public async Task UpdateBookingAsync_WhenOverlappingConfirmedBookingExists_ThrowsInvalidOperationException()
+	{
+		await using var fixture = await TestDbFixture.CreateAsync();
+		fixture.DbContext.HotelRooms.Add(new HotelRoomEntity
+			{ Id = 12, Name = "Room H", RoomType = RoomType.Single, MaxOccupancy = 1, IsActive = true });
+
+		var bookingToUpdate = new BookingEntity
+		{
+			ResourceType = ResourceType.HotelRoom,
+			ResourceId = 12,
+			StartTime = BaseDate,
+			EndTime = BaseDate.AddDays(1),
+			Status = BookingStatus.Confirmed,
+		};
+
+		var conflictingBooking = new BookingEntity
+		{
+			ResourceType = ResourceType.HotelRoom,
+			ResourceId = 12,
+			StartTime = BaseDate.AddDays(3),
+			EndTime = BaseDate.AddDays(5),
+			Status = BookingStatus.Confirmed,
+		};
+
+		fixture.DbContext.Bookings.AddRange(bookingToUpdate, conflictingBooking);
+		await fixture.DbContext.SaveChangesAsync();
+
+		var service = new HotelService(fixture.DbContext);
+
+		Assert.That(async () =>
+				await service.UpdateBookingAsync(
+					bookingToUpdate.Id,
+					new UpdateHotelBookingDto(BaseDate.AddDays(4), BaseDate.AddDays(6))),
+			Throws.TypeOf<InvalidOperationException>().With.Message.Contain("not available"));
+	}
 }

@@ -14,5 +14,11 @@ public interface IRestaurantService
 
 	Task<BookingEntity> CreateBookingAsync(CreateTableBookingDto request, CancellationToken cancellationToken = default);
 
+	Task<BookingEntity> UpdateBookingAsync(
+		long bookingId,
+		UpdateTableBookingDto request,
+		CancellationToken cancellationToken = default
+	);
+
 	Task CancelBookingAsync(long bookingId, CancellationToken cancellationToken = default);
 }

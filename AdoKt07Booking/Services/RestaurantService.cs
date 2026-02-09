@@ -69,11 +69,7 @@ public sealed class RestaurantService(AppDbContext dbContext) : IRestaurantServi
 	)
 	{
 		BookingValidation.EnsureValidRange(request.StartTime, request.EndTime);
-
-		if (request.EndTime - request.StartTime > MaxReservationDuration)
-		{
-			throw new ArgumentException("Restaurant booking cannot exceed 2 hours.");
-		}
+		EnsureWithinMaxDuration(request.StartTime, request.EndTime);
 
 		await using var transaction =
 			await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -118,6 +114,54 @@ public sealed class RestaurantService(AppDbContext dbContext) : IRestaurantServi
 		return booking;
 	}
 
+	public async Task<BookingEntity> UpdateBookingAsync(
+		long bookingId,
+		UpdateTableBookingDto request,
+		CancellationToken cancellationToken = default
+	)
+	{
+		BookingValidation.EnsureValidRange(request.StartTime, request.EndTime);
+		EnsureWithinMaxDuration(request.StartTime, request.EndTime);
+
+		await using var transaction =
+			await dbContext.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+		var booking = await dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
+
+		if (booking is null || booking.ResourceType != ResourceType.RestaurantTable)
+		{
+			throw new InvalidOperationException($"Table booking {bookingId} was not found.");
+		}
+
+		if (booking.Status == BookingStatus.Cancelled)
+		{
+			throw new InvalidOperationException("Cancelled table booking cannot be updated.");
+		}
+
+		const int capacity = 1;
+		var overlapCount = (await dbContext.Bookings
+				.ToListAsync(cancellationToken))
+			.Count(b =>
+				b.Id != bookingId &&
+				b.ResourceType == ResourceType.RestaurantTable &&
+				b.ResourceId == booking.ResourceId &&
+				b.Status == BookingStatus.Confirmed &&
+				BookingOverlap.IsOverlapping(request.StartTime, request.EndTime, b.StartTime, b.EndTime));
+
+		if (overlapCount >= capacity)
+		{
+			throw new InvalidOperationException("The table is not available in the requested time window.");
+		}
+
+		booking.StartTime = request.StartTime;
+		booking.EndTime = request.EndTime;
+
+		await dbContext.SaveChangesAsync(cancellationToken);
+		await transaction.CommitAsync(cancellationToken);
+
+		return booking;
+	}
+
 	public async Task CancelBookingAsync(long bookingId, CancellationToken cancellationToken = default)
 	{
 		var booking = await dbContext.Bookings.FirstOrDefaultAsync(b => b.Id == bookingId, cancellationToken);
@@ -136,5 +180,13 @@ public sealed class RestaurantService(AppDbContext dbContext) : IRestaurantServi
 		booking.CancelledAt = DateTimeOffset.UtcNow;
 
 		await dbContext.SaveChangesAsync(cancellationToken);
+	}
+
+	private static void EnsureWithinMaxDuration(DateTimeOffset startTime, DateTimeOffset endTime)
+	{
+		if (endTime - startTime > MaxReservationDuration)
+		{
+			throw new ArgumentException("Restaurant booking cannot exceed 2 hours.");
+		}
 	}
 }
