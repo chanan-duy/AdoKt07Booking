@@ -1,3 +1,4 @@
+using AdoKt07Booking.Data.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace AdoKt07Booking.Data;
@@ -8,15 +9,29 @@ public class AppDbContext : DbContext
 	{
 	}
 
-	// public DbSet<TaskEntity> Tasks { get; set; }
+	public DbSet<HotelRoomEntity> HotelRooms { get; set; }
+	public DbSet<RestaurantTableEntity> RestaurantTables { get; set; }
+	public DbSet<BookingEntity> Bookings { get; set; }
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder)
 	{
 		base.OnModelCreating(modelBuilder);
 
-		// modelBuilder.Entity<TaskEntity>()
-		// 	.Property(x => x.Id)
-		// 	.ValueGeneratedOnAdd();
+		modelBuilder.Entity<HotelRoomEntity>()
+			.Property(x => x.RoomType)
+			.HasConversion<string>();
+
+		modelBuilder.Entity<BookingEntity>(entity =>
+		{
+			entity.ToTable("bookings",
+				tableBuilder => { tableBuilder.HasCheckConstraint("CK_bookings_time_range", "start_time < end_time"); });
+
+			entity.Property(x => x.Status)
+				.HasConversion<string>();
+
+			entity.Property(x => x.ResourceType)
+				.HasConversion<string>();
+		});
 
 		foreach (var entityType in modelBuilder.Model.GetEntityTypes())
 		{
